@@ -1,13 +1,174 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
-  <meta charset="utf-8"/>
-  <title>Real-time CAPTCHA</title>
+  <meta charset="UTF-8"/>
+  <title>万能播放器</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <!-- Plyr 播放器样式 -->
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css"/>
+  <style>
+    :root {
+      --bg: #111;
+      --fg: #eee;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    h1 { margin: 0 0 1rem; }
+    .tabs {
+      display: flex;
+      gap: .5rem;
+      margin-bottom: 1rem;
+    }
+    .tabs button {
+      padding: .5rem 1rem;
+      border: none;
+      border-radius: .3rem;
+      background: #222;
+      color: var(--fg);
+      cursor: pointer;
+    }
+    .tabs button.active { background: #0073e6; }
+    .panel { display: none; width: 100%; max-width: 760px; }
+    .panel.active { display: block; }
+    input[type=file], input[type=text] {
+      width: 100%;
+      padding: .5rem;
+      margin-bottom: .5rem;
+      border-radius: .3rem;
+      border: 1px solid #333;
+      background: #222;
+      color: var(--fg);
+    }
+    .drop-area {
+      border: 2px dashed #555;
+      border-radius: .5rem;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+    }
+    .drop-area.dragover { border-color: #0073e6; }
+    #playerContainer {
+      width: 100%;
+      aspect-ratio: 16/9;
+      margin-top: .5rem;
+    }
+    iframe { width: 100%; height: 100%; border: none; }
+  </style>
 </head>
 <body>
-  <h1>今日验证码：<span id="c">加载中…</span></h1>
+  <h1>万能播放器</h1>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-panel="local">本地文件</button>
+    <button class="tab-btn" data-panel="link">直链播放</button>
+    <button class="tab-btn" data-panel="embed">嵌入播放</button>
+  </div>
+
+  <!-- 本地文件 -->
+  <div id="local" class="panel active">
+    <div class="drop-area" id="dropArea">
+      <p>拖放视频文件到此处 或 <input type="file" id="fileInput" accept="video/*"/></p>
+    </div>
+    <video id="localPlayer" playsinline controls></video>
+  </div>
+
+  <!-- 直链播放 -->
+  <div id="link" class="panel">
+    <input type="text" id="urlInput" placeholder="输入 .mp4 / .m3u8 / .mpd 等直链" />
+    <button onclick="playUrl()">播放</button>
+    <video id="urlPlayer" playsinline controls></video>
+  </div>
+
+  <!-- 嵌入播放 -->
+  <div id="embed" class="panel">
+    <input type="text" id="embedInput" placeholder="粘贴 YouTube / Bilibili / Vimeo 等嵌入代码或地址" />
+    <button onclick="loadEmbed()">加载</button>
+    <div id="playerContainer"></div>
+  </div>
+
+  <!-- Plyr 播放器脚本 -->
+  <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
   <script>
-    fetch('./code.json').then(r=>r.json()).then(d=>c.textContent=d.code);
+    // -------------- 标签切换 --------------
+    document.querySelectorAll('.tab-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.panel).classList.add('active');
+      })
+    );
+
+    // -------------- 本地文件 --------------
+    const fileInput = document.getElementById('fileInput');
+    const localPlayer = document.getElementById('localPlayer');
+    const dropArea = document.getElementById('dropArea');
+
+    function playFile(file) {
+      const url = URL.createObjectURL(file);
+      localPlayer.src = url;
+      localPlayer.load();
+      localPlayer.play();
+      // 保存播放进度
+      localPlayer.onloadedmetadata = () => {
+        const key = `progress_${file.name}`;
+        if (localStorage[key]) localPlayer.currentTime = localStorage[key];
+      };
+      localPlayer.ontimeupdate = () => localStorage.setItem(`progress_${file.name}`, localPlayer.currentTime);
+    }
+
+    fileInput.addEventListener('change', e => playFile(e.target.files[0]));
+    ['dragover', 'drop'].forEach(evt =>
+      dropArea.addEventListener(evt, e => {
+        e.preventDefault();
+        dropArea.classList.toggle('dragover', evt === 'dragover');
+        if (evt === 'drop' && e.dataTransfer.files[0]) playFile(e.dataTransfer.files[0]);
+      })
+    );
+
+    // -------------- 直链播放 --------------
+    function playUrl() {
+      const url = document.getElementById('urlInput').value.trim();
+      const player = document.getElementById('urlPlayer');
+      player.src = url;
+      player.load();
+      player.play();
+      new Plyr(player); // 美化播放器
+    }
+
+    // -------------- 嵌入播放 --------------
+    function loadEmbed() {
+      const raw = document.getElementById('embedInput').value.trim();
+      let html = raw;
+      // 简单识别常见平台并转成 iframe
+      const youtube = raw.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+      if (youtube) html = `<iframe src="https://www.youtube.com/embed/${youtube[1]}" allowfullscreen></iframe>`;
+
+      const bilibili = raw.match(/bilibili\.com\/video\/(BV\w+)/);
+      if (bilibili) html = `<iframe src="https://player.bilibili.com/player.html?bvid=${bilibili[1]}" allowfullscreen></iframe>`;
+
+      const vimeo = raw.match(/vimeo\.com\/(\d+)/);
+      if (vimeo) html = `<iframe src="https://player.vimeo.com/video/${vimeo[1]}" allowfullscreen></iframe>`;
+
+      document.getElementById('playerContainer').innerHTML = html;
+    }
+
+    // -------------- 键盘快捷键 --------------
+    window.addEventListener('keydown', e => {
+      const vid = document.querySelector('.panel.active video');
+      if (!vid) return;
+      if (e.code === 'Space') { e.preventDefault(); vid.paused ? vid.play() : vid.pause(); }
+      if (e.code === 'ArrowLeft') vid.currentTime -= 5;
+      if (e.code === 'ArrowRight') vid.currentTime += 5;
+    });
   </script>
 </body>
 </html>
