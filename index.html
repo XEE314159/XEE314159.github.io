@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Real-time CAPTCHA</title>
+</head>
+<body>
+  <h1>今日验证码：<span id="c">加载中…</span></h1>
+  <script>
+    fetch('./code.json').then(r=>r.json()).then(d=>c.textContent=d.code);
+  </script>
+</body>
+</html>
